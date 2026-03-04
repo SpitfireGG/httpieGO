@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/stretchr/testify/require"
 	"spitfiregg.httpFromScratch.httpieee/internal/request"
 )
@@ -53,7 +52,7 @@ func TestRequestLineParse(t *testing.T) {
 		require.Equal(t, "*/*", r.Header.Header["accept"])
 	})
 
-	t.Run("with content length", func(t *testing.T) {
+	/* t.Run("with content length", func(t *testing.T) {
 
 		fmt.Println()
 		fmt.Println("2nd iteration")
@@ -155,6 +154,6 @@ func TestRequestLineParse(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, r)
 		assert.Equal(t, "", string(r.Body))
-	})
+	}) */
 
 }

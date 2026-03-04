@@ -125,6 +125,8 @@ func (h *Headers) Parse(data []byte) (int, bool, error) {
 		h.Add(key, value)
 		read += idx + len(clrf)
 		slog.Info("headers.go", "read", read)
+		fmt.Println("Headers : ")
+		fmt.Println("-Key: ", key)
 	}
 	return read, done, nil
 }

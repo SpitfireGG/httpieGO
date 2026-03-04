@@ -82,6 +82,10 @@ func ParseRequestLine(str []byte) (*RequestLine, int, error) {
 		RequestTarget: parts[1],
 		HttpVersion:   httpParts[1],
 	}
+	fmt.Println("Request line: ")
+	fmt.Println("- Method: ", r1.Method)
+	fmt.Println("- Target: ", r1.RequestTarget)
+	fmt.Println("- Version: ", r1.HttpVersion)
 
 	return r1, idx + len(clrf), nil
 }
@@ -104,7 +108,7 @@ outer:
 		// data:"GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 
 		currentData := data[read:]
-		slog.Info("Request#parse loop", "state", r.state, "currentData", string(currentData), "consumed", len(string(currentData)))
+		slog.Info("# Request [parse loop]", "state", r.state, "currentData", string(currentData), "consumed", len(string(currentData)))
 		if len(currentData) == 0 {
 			slog.Info("no more data, breaking...")
 			break outer
@@ -117,31 +121,31 @@ outer:
 
 		case RequestStateInit:
 			requestLine, byteCons, err := ParseRequestLine(currentData)
-			slog.Info("Bytes consumed# ", "bc", byteCons, "state", r.state)
+			slog.Info("# Bytes consumed ", "bytes cons >>> ", byteCons, "state", r.state)
 
 			if err != nil {
 				r.state = RequestStateError
 				return read, err
 			}
 			if byteCons == 0 {
-				slog.Info("need more data to be parsed")
+				slog.Info("# need more data to be parsed")
 				break outer
 			}
 			r.RequestLine = *requestLine
 			read += byteCons
-			slog.Info("bytesRead#", "read", read)
+			slog.Info("# bytesRead#", "read", read)
 
-			slog.Info("request#state done, transitioning to header parser state")
+			slog.Info("# request [state done], transitioning to header parser state")
 			r.state = requestStateParsingHeaders
 			continue outer
 
 		case RequestStateDone:
-			slog.Info("parsing header state")
+			slog.Info("# parsing header state")
 			break outer
 
 		case RequestBody:
 			bytesNeeded := r.ContentLength - r.BodyBytesRead
-			slog.Info("#bytesNeeded => ", "[%d]\n", bytesNeeded)
+			slog.Info("# bytesNeeded ", "[%d]\n", bytesNeeded)
 
 			if len(currentData) >= bytesNeeded {
 				r.Body = append(r.Body, currentData[:bytesNeeded]...)
@@ -160,7 +164,7 @@ outer:
 		case requestStateParsingHeaders:
 			n, done, err := r.Header.Parse(currentData)
 
-			slog.Info("Read bytes", "requestStateParsingHeaders", read)
+			slog.Info("# Read bytes", "requestStateParsingHeaders", read)
 
 			if err != nil {
 				r.state = RequestStateError
@@ -172,18 +176,16 @@ outer:
 			read += n
 
 			if !done {
-				slog.Info("Need more data for headers.")
+				slog.Info("# Need more data for headers.")
 				break outer
 			}
-			slog.Info("Header parsing complete. Transitioning to check for Body.", "headerBytes", n)
+			slog.Info("# Header parsing complete. Transitioning to check for Body.", "headerBytes", n)
 
-			// Check for Content-Length header to see if we expect a body
 			cl := GetCL(r.Header, "Content-Length", 0)
 			r.ContentLength = cl
 
 			if cl > 0 {
 				r.state = RequestBody
-				// We need to initialize the Body slice if it's nil
 				if r.Body == nil {
 					r.Body = make([]byte, 0, cl)
 				}
@@ -201,8 +203,9 @@ outer:
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 
+	// remove timestamp & level message from the output
 	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
-		if a.Key == slog.TimeKey {
+		if a.Key == slog.TimeKey || a.Key == "level" {
 			return slog.Attr{}
 		}
 		return a
@@ -210,6 +213,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	}
 	slogHandlerOption := slog.HandlerOptions{
 		ReplaceAttr: replaceAttr,
+		Level:       slog.LevelInfo,
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slogHandlerOption))
@@ -224,19 +228,19 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	bufIdx := 0
 
 	for request.state != RequestStateDone && request.state != RequestStateError {
-		slog.Info("buffer", "buffer index", bufIdx)
+		slog.Info("# buffer", "buffer index -> ", bufIdx)
 		if bufIdx >= len(buf) {
-			// increase the buffer size
+			// double the buffer size if size is not enough
 			newbuf := make([]byte, BUF_SIZE*2)
 			copy(newbuf, buf[:bufIdx])
 			buf = newbuf
 		}
 		n, err := reader.Read(buf[bufIdx:])
-		slog.Info("buffer#", "buffer read", n)
+		slog.Info("# buffer", "buffer read ->>", n)
 
 		if err == io.EOF {
 			if request.done() {
-				slog.Debug("error buffer context", "error#", err)
+				slog.Debug("# error buffer context", "error >> ", err)
 				break
 			} else {
 				return nil, errors.New("unexpected, reached the end of the file")
